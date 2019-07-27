@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Microsoft.Quantum.Simulation.Core;
@@ -10,6 +11,8 @@ namespace Microsoft.Quantum.Simulation.Simulators
 {
     public partial class QuantumSimulator
     {
+        #region Dump Method Implementation
+
         /// <summary>
         /// Dumps the wave function for the given qubits into the given target. 
         /// If the target is QVoid or an empty string, it dumps it to the console
@@ -63,6 +66,62 @@ namespace Microsoft.Quantum.Simulation.Simulators
             }
         }
 
+        /// <summary>
+        /// Prints the state vector of the provided qubit register in Dirac (ket) notation to the
+        /// specified location. States with zero amplitude will be ignored. The location that the state
+        /// is printed to depends on the target machine. In most cases, you can either use the empty
+        /// tuple ("()") to print it to the console with the <see cref="Intrinsic.Message"/> method, or
+        /// use a string representing the path of a logging file on the filesystem.
+        /// 
+        /// For this method to succeed, the qubits in this register may not be entangled with external
+        /// qubits that are not included in the register. Otherwise, it will simply print that the
+        /// qubits are entangled and do not have an independent state.
+        /// 
+        /// If <paramref name="Qubits"/> is null, it will print the state vector of the entire machine
+        /// (including all of the qubits that have been allocated).
+        /// 
+        /// Each ket in the state vector will be provided in little-endian form. 
+        /// </summary>
+        protected virtual QVoid DumpDirac<T>(T Location, long Precision, double ZeroTolerance, bool UseRelativePhases, IQArray<Qubit> Qubits = null)
+        {
+            string target = (Location is QVoid) ? "" : Location.ToString();
+            StreamWriter writer = null;
+            try
+            {
+                Action<string> writerDelegate = Console.Write;
+                if(!string.IsNullOrWhiteSpace(target))
+                {
+                    writer = new StreamWriter(target);
+                    writerDelegate = writer.Write;
+                }
+
+                DiracDumper dumper = new DiracDumper(this, writerDelegate, Precision, ZeroTolerance, UseRelativePhases);
+                var ids = Qubits?.Select(q => (uint)q.Id).ToArray() ?? QubitIds;
+                writerDelegate($"# wave function for qubits with ids (least to most significant): {string.Join(";", ids)}{System.Environment.NewLine}");
+
+                if (!dumper.Dump(Qubits))
+                {
+                    writerDelegate($"## Qubits were entangled with an external qubit. Cannot dump corresponding wave function. ##{System.Environment.NewLine}");
+                }
+
+            }
+            catch(Exception ex)
+            {
+                var logMessage = this.Get<ICallable<string, QVoid>, Microsoft.Quantum.Intrinsic.Message>();
+                logMessage.Apply($"[warning] Unable to write state to '{target}': ({ex.Message})");
+            }
+            finally
+            {
+                writer?.Dispose();
+            }
+
+            return QVoid.Instance;
+        }
+
+        #endregion
+
+        #region QS ICallable Implementations
+
         public class QsimDumpMachine<T> : Quantum.Diagnostics.DumpMachine<T>
         {
             private QuantumSimulator Simulator { get; }
@@ -101,5 +160,46 @@ namespace Microsoft.Quantum.Simulation.Simulators
                 return Simulator.Dump(location, qubits);
             };
         }
+
+        /// <summary>
+        /// Implements the <see cref="Diagnostics.DumpRegisterDirac{__T__}"/> method.
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        public class QSimDumpRegisterDirac<T> : Diagnostics.DumpRegisterDirac<T>
+        {
+            /// <summary>
+            /// The simulator that's currently executing
+            /// </summary>
+            private readonly QuantumSimulator Simulator;
+
+            /// <summary>
+            /// Creates a new <see cref="QSimDumpRegisterDirac{T}"/> instance.
+            /// </summary>
+            /// <param name="TargetMachine">The simulator that's currently executing</param>
+            public QSimDumpRegisterDirac(QuantumSimulator TargetMachine)
+                : base(TargetMachine)
+            {
+                Simulator = TargetMachine;
+            }
+
+            /// <summary>
+            /// Provides the actual functionality of the method.
+            /// </summary>
+            public override Func<(T, IQArray<Qubit>, long, double, bool), QVoid> Body => (argumentTuple) =>
+            {
+                var (location, qubits, precision, zeroTolerance, useRelativePhases) = argumentTuple;
+
+                // Validation checks
+                if (location == null)
+                {
+                    throw new ArgumentNullException(nameof(location));
+                }
+                Simulator.CheckQubits(qubits); // Make sure qubits is not null and not empty
+
+                return Simulator.DumpDirac(location, precision, zeroTolerance, useRelativePhases, qubits);
+            };
+        }
+
+        #endregion
     }
 }
