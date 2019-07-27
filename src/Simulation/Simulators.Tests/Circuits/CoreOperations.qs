@@ -317,6 +317,18 @@ namespace Microsoft.Quantum.Tests.CoreOperations {
             DumpMachine();
         }
     }
+
+
+	operation DumpDiracTest() : Unit
+	{
+		using(qubits = Qubit[5])
+		{
+			H(qubits[0]);
+			ApplyToEach(CNOT(qubits[0], _), qubits[1..4]);
+			DumpRegisterDirac((), qubits, 4, 1E-17, true);
+			ResetAll(qubits);
+		}
+	}
     
     operation LockedFileDumpTest () : Unit {
         using (qubits = Qubit[3]) {

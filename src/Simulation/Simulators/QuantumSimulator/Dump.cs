@@ -88,7 +88,8 @@ namespace Microsoft.Quantum.Simulation.Simulators
             StreamWriter writer = null;
             try
             {
-                Action<string> writerDelegate = Console.Write;
+                ICallable<string, QVoid> logMessage = Get<ICallable<string, QVoid>, Intrinsic.Message>();
+                Action<string> writerDelegate = (message) => logMessage.Apply(message);
                 if(!string.IsNullOrWhiteSpace(target))
                 {
                     writer = new StreamWriter(target);
@@ -97,11 +98,11 @@ namespace Microsoft.Quantum.Simulation.Simulators
 
                 DiracDumper dumper = new DiracDumper(this, writerDelegate, Precision, ZeroTolerance, UseRelativePhases);
                 var ids = Qubits?.Select(q => (uint)q.Id).ToArray() ?? QubitIds;
-                writerDelegate($"# wave function for qubits with ids (least to most significant): {string.Join(";", ids)}{System.Environment.NewLine}");
+                writerDelegate($"# wave function for qubits with ids (least to most significant): {string.Join(";", ids)}");
 
                 if (!dumper.Dump(Qubits))
                 {
-                    writerDelegate($"## Qubits were entangled with an external qubit. Cannot dump corresponding wave function. ##{System.Environment.NewLine}");
+                    writerDelegate($"## Qubits were entangled with an external qubit. Cannot dump corresponding wave function. ##");
                 }
 
             }

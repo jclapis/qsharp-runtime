@@ -22,6 +22,8 @@ namespace Microsoft.Quantum.Simulation.Simulators
 
             protected string AmplitudeFormatString { get; }
 
+            protected StringBuilder KetBuilder { get; }
+
             protected bool IsFirstState;
 
             protected double FirstPhaseRealMultiplier;
@@ -30,6 +32,8 @@ namespace Microsoft.Quantum.Simulation.Simulators
 
             protected int NumberOfQubits;
 
+            protected int RemainingStates;
+
             public DiracDumper(QuantumSimulator Simulator, Action<string> Write, long Precision, double ZeroTolerance, bool UseRelativePhases)
                 : base(Simulator)
             {
@@ -37,31 +41,30 @@ namespace Microsoft.Quantum.Simulation.Simulators
                 this.Precision = Precision;
                 this.ZeroTolerance = ZeroTolerance;
                 this.UseRelativePhases = UseRelativePhases;
+                KetBuilder = new StringBuilder();
 
                 AmplitudeFormatString = "0.";
                 for(int i = 0; i < Precision; i++)
                 {
                     AmplitudeFormatString += "#";
                 }
-
-                if(Write == null)
-                {
-                    Write = Console.Write;
-                }
             }
 
             public override bool Dump(IQArray<Qubit> Qubits = null)
             {
                 IsFirstState = true;
+                KetBuilder.Clear();
 
                 if(Qubits == null)
                 {
                     NumberOfQubits = (int)Simulator.QubitManager.GetAllocatedQubitsCount();
+                    RemainingStates = (int)SysMath.Pow(2, NumberOfQubits);
                     sim_Dump(Simulator.Id, Callback);
                 }
                 else
                 {
                     NumberOfQubits = (int)Qubits.Length;
+                    RemainingStates = (int)SysMath.Pow(2, NumberOfQubits);
                     uint[] qubitIDs = Qubits.GetIds();
                     sim_DumpQubits(Simulator.Id, (uint)NumberOfQubits, qubitIDs, Callback);
                 }
@@ -71,10 +74,16 @@ namespace Microsoft.Quantum.Simulation.Simulators
 
             public override bool Callback(uint State, double RealComponent, double ImaginaryComponent)
             {
+                RemainingStates--;
+
                 // Ignore this state if both the real and imaginary amplitudes are too low
                 if (RealComponent < ZeroTolerance &&
                     ImaginaryComponent < ZeroTolerance)
                 {
+                    if(RemainingStates == 0)
+                    {
+                        Write(KetBuilder.ToString());
+                    }
                     return true;
                 }
 
@@ -106,19 +115,23 @@ namespace Microsoft.Quantum.Simulation.Simulators
                 }
                 else
                 {
-                    Write($" {(amplitudeSign ? "+" : "–")} ");
+                    KetBuilder.Append($" {(amplitudeSign ? "+" : "–")} ");
                 }
 
                 // Append the amplitude and the ket
                 if (amplitudeString == "1")
                 {
-                    Write(stateKet);
+                    KetBuilder.Append(stateKet);
                 }
                 else
                 {
-                    Write($"{amplitudeString}{stateKet})");
+                    KetBuilder.Append($"{amplitudeString}{stateKet}");
                 }
 
+                if (RemainingStates == 0)
+                {
+                    Write(KetBuilder.ToString());
+                }
                 return true;
             }
 

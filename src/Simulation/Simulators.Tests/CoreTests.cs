@@ -220,6 +220,20 @@ namespace Microsoft.Quantum.Simulation.Simulators.Tests
             RunOne(new ResourcesEstimator());
         }
 
+
+        [Fact]
+        public void DumpDirac()
+        {
+            using(QuantumSimulator simulator = new QuantumSimulator())
+            {
+                //simulator.InitBuiltinOperations(typeof(Helper));
+                //simulator.Register(typeof(Circuits.Generics.Trace<>), typeof(Helper.TraceImpl<>), typeof(IUnitary));
+                simulator.OnLog += output.WriteLine;
+                DumpDiracTest.Run(simulator).Wait();
+            }
+        }
+
+
         [Fact]
         public void ZeroQubits()
         {
